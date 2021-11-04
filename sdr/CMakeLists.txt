@@ -12,14 +12,39 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_components REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 
-add_executable(${PROJECT_NAME} src/system_data_recorder.cpp)
-ament_target_dependencies(${PROJECT_NAME} rclcpp rosbag2_cpp rosbag2_transport)
+include_directories(include)
+
+add_library(sdr_component SHARED src/sdr_component.cpp)
+target_compile_definitions(sdr_component PRIVATE "SDR_BUILDING_DLL")
+ament_target_dependencies(sdr_component
+  rclcpp
+  rclcpp_components
+  rclcpp_lifecycle
+  rosbag2_cpp
+  rosbag2_transport
+)
+rclcpp_components_register_nodes(sdr_component "sdr::SystemDataRecorder")
+
+add_executable(system_data_recorder src/system_data_recorder.cpp)
+target_link_libraries(system_data_recorder sdr_component)
+ament_target_dependencies(system_data_recorder
+  rclcpp
+)
 
 install(TARGETS
-  ${PROJECT_NAME}
+  sdr_component
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+install(TARGETS
+  system_data_recorder
   DESTINATION lib/${PROJECT_NAME}
 )
 
