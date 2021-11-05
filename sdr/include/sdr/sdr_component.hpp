@@ -16,6 +16,7 @@
 #define SDR__SDR_COMPONENT_HPP__
 
 #include <atomic>
+#include <filesystem>
 #include <queue>
 #include <string>
 
@@ -37,7 +38,9 @@ public:
     const std::string & node_name,
     const rclcpp::NodeOptions & options,
     const std::string & bag_uri,
-    const std::string & copy_destination_uri);
+    const std::string & copy_destination,
+    const unsigned int max_file_size,
+    const std::unordered_map<std::string, std::string> & topics_and_types);
 
   SDR_PUBLIC
   rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
@@ -60,13 +63,30 @@ public:
   on_shutdown(const rclcpp_lifecycle::State & state);
 
 private:
+  /////////////////////////////////////////////////////////////////////////////////////////////////
+  // Variables and functions for the record functionality
+  /////////////////////////////////////////////////////////////////////////////////////////////////
+  rosbag2_storage::StorageOptions storage_options_;
+  std::unordered_map<std::string, std::string> topics_and_types_;
+  std::unordered_map<std::string, std::shared_ptr<rclcpp::GenericSubscription>> subscriptions_;
+
   std::shared_ptr<rosbag2_cpp::Writer> writer_;
+  // Optional: Use an atomic bool to support running this node in a multi-threaded executor
+  std::atomic_bool is_paused = true;
 
-  std::mutex copy_thread_mutex_;
-  std::condition_variable copy_thread_wake_cv_;
-  std::shared_ptr<std::thread> copy_thread_;
+  void start_recording();
+  void stop_recording();
+  void pause_recording();
+  void unpause_recording();
 
-  enum class SdrState
+  void subscribe_to_topics();
+  void subscribe_to_topic(const std::string & topic, const std::string & type);
+  void unsubscribe_from_topics();
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////
+  // Variables and functions for the file-copying thread and functionality
+  /////////////////////////////////////////////////////////////////////////////////////////////////
+  enum class SdrStateChange
   {
     NO_CHANGE,
     PAUSED,
@@ -74,13 +94,25 @@ private:
     FINISHED
   };
 
-  SdrState state_msg_ = SdrState::NO_CHANGE;
+  SdrStateChange state_msg_ = SdrStateChange::NO_CHANGE;
   std::queue<std::string> files_to_copy_;
+  std::mutex copy_thread_mutex_;
+  std::condition_variable copy_thread_wake_cv_;
+  std::shared_ptr<std::thread> copy_thread_;
 
   void copy_thread_main();
   bool copy_thread_should_wake();
-  void notify_state_change(SdrState new_state);
-  void notify_new_file_to_copy(std::string & file_uri);
+  void notify_state_change(SdrStateChange new_state);
+  void notify_new_file_to_copy(const std::string & file_uri);
+  void notify_new_file_to_copy(const std::filesystem::path & file_path);
+
+  std::filesystem::path source_directory_;
+  std::filesystem::path destination_directory_;
+  std::string last_bag_file_ = "";
+  bool cleaned_up = true;
+
+  bool create_copy_destination();
+  void copy_bag_file(const std::string & bag_file_name);
 };
 
 }  // namespace sdr

@@ -15,6 +15,7 @@ find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(rosbag2_storage REQUIRED)
 find_package(rosbag2_transport REQUIRED)
 
 include_directories(include)
@@ -26,6 +27,7 @@ ament_target_dependencies(sdr_component
   rclcpp_components
   rclcpp_lifecycle
   rosbag2_cpp
+  rosbag2_storage
   rosbag2_transport
 )
 rclcpp_components_register_nodes(sdr_component "sdr::SystemDataRecorder")

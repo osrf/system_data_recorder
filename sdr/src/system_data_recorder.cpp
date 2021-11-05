@@ -26,8 +26,17 @@ int main(int argc, char * argv[])
 {
   rclcpp::init(argc, argv);
 
+  auto topics_and_types = std::unordered_map<std::string, std::string>();
+  topics_and_types.insert({"chatter", "std_msgs/msg/String"});
+  auto sdr_component = std::make_shared<sdr::SystemDataRecorder>(
+    "sdr",
+    rclcpp::NodeOptions(),
+    "test_bag",
+    "copied_bag",
+    100000,
+    topics_and_types);
+
   rclcpp::executors::SingleThreadedExecutor exec;
-  auto sdr_component = std::make_shared<sdr::SystemDataRecorder>("sdr", rclcpp::NodeOptions(), "", "");
   exec.add_node(sdr_component->get_node_base_interface());
   exec.spin();
 
