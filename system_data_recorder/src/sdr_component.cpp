@@ -14,6 +14,7 @@
 
 #include "sdr/sdr_component.hpp"
 
+#include "lifecycle_msgs/msg/state.hpp"
 #include "rosbag2_storage/topic_metadata.hpp"
 
 namespace sdr
@@ -105,7 +106,8 @@ SystemDataRecorder::on_configure(const rclcpp_lifecycle::State & /* state */)
     storage_options_,
     {rmw_get_serialization_format(), rmw_get_serialization_format()});
 
-  // Start receiving data - it won't be recorded yet because is_paused is true
+  // Start receiving data - it won't be recorded yet because the node's lifecycle is not in the
+  // Active state
   subscribe_to_topics();
 
   // Make sure cleanup happens when the on_cleanup transition occurs - this allows the node to be
@@ -115,28 +117,24 @@ SystemDataRecorder::on_configure(const rclcpp_lifecycle::State & /* state */)
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
-// In the on_activate transition, we simply unpause the recording so that received data will be
-// written to the bag.
+// In the on_activate transition, we simply notify the worker thread that we are recording. Data
+// will be written to the bag because the state changes to Active.
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 SystemDataRecorder::on_activate(const rclcpp_lifecycle::State & /* state */)
 {
   RCLCPP_INFO(get_logger(), "Starting recording");
-  // Hit play on recorder
-  is_paused = false;
 
   // Notify the copy thread
   notify_state_change(SdrStateChange::RECORDING);
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
-// In the on_deactivate transition, we pause the recording so that received data will be ignored
-// instead of being written to the bag.
+// In the on_deactivate transition, we simply notify the worker thread that we are paused. Data
+// will not be written to the bag because the state changes to Inactive.
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 SystemDataRecorder::on_deactivate(const rclcpp_lifecycle::State & /* state */)
 {
   RCLCPP_INFO(get_logger(), "Pausing recording");
-  // Hit pause on recorder
-  is_paused = true;
 
   // Notify the copy thread
   notify_state_change(SdrStateChange::PAUSED);
@@ -152,9 +150,6 @@ SystemDataRecorder::on_cleanup(const rclcpp_lifecycle::State & /* state */)
   RCLCPP_INFO(get_logger(), "Stopping and finalising recording");
   // Avoid double-cleanup if on_shutdown is called after this
   cleaned_up = true;
-  // Ensure recording is paused (although this should have happend in on_deactivate prior to
-  // on_cleanup being called)
-  is_paused = true;
 
   // Stop recording by stopping data from arriving
   unsubscribe_from_topics();
@@ -245,7 +240,7 @@ void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std
       // When a message is received, it should only be written to the bag if recording is not
       // paused (i.e. the node lifecycle state is "active"). If recording is paused, the message is
       // thrown away.
-      if (!is_paused) {
+      if (get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
         writer_->write(*message, topic, type, rclcpp::Clock(RCL_SYSTEM_TIME).now());
       }
     });

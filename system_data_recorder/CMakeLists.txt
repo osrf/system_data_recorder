@@ -11,6 +11,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclcpp_components REQUIRED)
 find_package(rclcpp_lifecycle REQUIRED)

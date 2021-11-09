@@ -92,9 +92,6 @@ private:
 
   // This writer does the actual storing of data during recording
   std::shared_ptr<rosbag2_cpp::Writer> writer_;
-  // When true, incoming data is ignored. When false, incoming data is written to the bag.
-  // Optional: Use an atomic bool to support running this node in a multi-threaded executor.
-  std::atomic_bool is_paused = true;
 
   void start_recording();
   void stop_recording();
