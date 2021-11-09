@@ -81,6 +81,7 @@ private:
 
   void subscribe_to_topics();
   void subscribe_to_topic(const std::string & topic, const std::string & type);
+  rclcpp::QoS get_appropriate_qos_for_topic(const std::string & topic);
   void unsubscribe_from_topics();
 
   /////////////////////////////////////////////////////////////////////////////////////////////////

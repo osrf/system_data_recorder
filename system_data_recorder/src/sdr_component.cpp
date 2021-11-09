@@ -197,7 +197,7 @@ void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std
   // maintainability.
   writer_->create_topic(topic_metadata);
 
-  auto qos = rclcpp::QoS(1);
+  auto qos = get_appropriate_qos_for_topic(topic);
   auto subscription = create_generic_subscription(
     topic,
     type,
@@ -217,6 +217,67 @@ void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std
     writer_->remove_topic(topic_metadata);
     RCLCPP_ERROR(get_logger(), "Failed to subscribe to topic '%s'", topic.c_str());
   }
+}
+
+rclcpp::QoS SystemDataRecorder::get_appropriate_qos_for_topic(const std::string & topic)
+{
+  auto qos = rclcpp::QoS(rmw_qos_profile_default.depth);
+
+  // Get the information about known publishers on this topic
+  auto endpoints = get_publishers_info_by_topic(topic);
+  if (endpoints.empty()) {
+    // There are not yet any publishers on the topic.
+    // Use the default QoS profile, as we do not know what publishers will use since there are not
+    // yet any publishers on this topic.
+    return qos;
+  }
+
+  // Count the number of reliable and transient-local publishers for the topic
+  size_t reliability_reliable_endpoints_count = 0;
+  size_t durability_transient_local_endpoints_count = 0;
+  for (const auto & endpoint : endpoints) {
+    const auto & profile = endpoint.qos_profile().get_rmw_qos_profile();
+    if (profile.reliability == RMW_QOS_POLICY_RELIABILITY_RELIABLE) {
+      ++reliability_reliable_endpoints_count;
+    }
+    if (profile.durability == RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL) {
+      ++durability_transient_local_endpoints_count;
+    }
+  }
+
+  if (reliability_reliable_endpoints_count == endpoints.size()) {
+    // All publishers are reliable, so we can use the reliable QoS
+    qos.reliable();
+  } else {
+    // There is a mix of QoS profiles amongst the publishers, so use the QoS setting that captures
+    // all of them
+    RCLCPP_WARN(
+      get_logger(),
+      "Some, but not all, publishers on topic \"%s\" are offering "
+        "RMW_QOS_POLICY_RELIABILITY_RELIABLE. Falling back to "
+        "RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT as it will connect to all publishers. Some "
+        "messages from Reliable publishers could be dropped.",
+      topic.c_str());
+    qos.best_effort();
+  }
+
+  if (durability_transient_local_endpoints_count == endpoints.size()) {
+    // All publishers are transient local, so we can use the transient local QoS
+    qos.transient_local();
+  } else {
+    // There is a mix of QoS profiles amongst the publishers, so use the QoS setting that captures
+    // all of them
+    RCLCPP_WARN(
+      get_logger(),
+      "Some, but not all, publishers on topic \"%s\" are offering "
+        "RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL. Falling back to "
+        "RMW_QOS_POLICY_DURABILITY_VOLATILE as it will connect to all publishers. Previously-"
+        "published latched messages will not be retrieved.",
+      topic.c_str());
+    qos.durability_volatile();
+  }
+
+  return qos;
 }
 
 void SystemDataRecorder::unsubscribe_from_topics()
