@@ -25,17 +25,17 @@ Create a `colcon` workspace with the [SDR source code](https://github.com/osrf/s
 
 Run the executable to start the node.
 
-   ros2 run system_data_recorder system_data_recorder
+    ros2 run system_data_recorder system_data_recorder
 
 In a separate terminal, use the lifecycle manager to configure and activate the node.
 
-   ros2 lifecycle set sdr configure
-   ros2 lifecycle set sdr activate
+    ros2 lifecycle set sdr configure
+    ros2 lifecycle set sdr activate
 
 This will enable recording of data to the bag.
 To pause recording, deactivate the node.
 
-   ros2 lifecycle set sdr deactivate
+    ros2 lifecycle set sdr deactivate
 
 From here, recording can be resumed by re-activating the node, or recording can be terminated by cleaning up the node.
 
