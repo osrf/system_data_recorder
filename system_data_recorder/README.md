@@ -1,5 +1,5 @@
-System Data Recorder (SDR)
-~~~~~~~~~~~~~~~~~~~~~~~~~~
+# System Data Recorder (SDR)
+
 
 A lifecycle node and executable for recording topic data to a rosbag2 bag, while simultaneously copying the split bag files to another location as each bag file is completed.
 This is useful, for example, to copy bag data files to an external disc during recording as each data file is completed, rather than waiting until all data is recorded before copying the entire bag at once (an operation that can take a significant time if the bag is large).
@@ -8,8 +8,7 @@ The copying function requires that a maximum file size for bag files be enabled.
 Otherwise no splitting will be performed and the files will not be copied until recording is terminated.
 
 
-Compilation
-===========
+## Compilation
 
 The SDR requires two features not yet available in the rosbag2 main branch or binary releases.
 You will need to compile rosbag2 from source, applying the following two pull requests to the source prior to compiling it.
@@ -20,11 +19,9 @@ You will need to compile rosbag2 from source, applying the following two pull re
 Create a `colcon` workspace with the [SDR source code](https://github.com/osrf/system_data_recorder) in it, and compile the workspace.
 
 
-Use
-===
+## Use
 
-Lifecycle management
---------------------
+### Lifecycle management
 
 Run the executable to start the node.
 
@@ -46,8 +43,7 @@ From here, recording can be resumed by re-activating the node, or recording can 
 
 Once cleaned up, the node will copy the final files of the bag, as well as any metadata, to the backup destination.
 
-Configuring
------------
+### Configuring
 
 The SDR is configured by the arguments passed to the node's constructor.
 These are not currently exposed as command line arguments or ROS parameters, so they must be changed in the source code.
@@ -61,11 +57,9 @@ By default, the SDR will:
 - Split bag files every 100,000 bytes.
 
 
-Lifecycle transition behaviours
-===============================
+## Lifecycle transition behaviours
 
-on_configure
-------------
+### on_configure
 
 In the on_configure state, the node sets up the rosbag2 infrastructure for
 recording by creating a writer and opening the storage. It also sets up the
@@ -73,30 +67,26 @@ worker thread that will copy files in parallel to the recording of data. A
 callback is registered with the writer so that the node will get informed each
 time a new file is created in the bag.
 
-on_activate
------------
+### on_activate
 
 In the on_activate transition, the node simply notifies the worker thread that
 it is recording. Data will be written to the bag automatically because the
 state changes to `Active`.
 
-on_deactivate
--------------
+### on_deactivate
 
 In the on_deactivate transition, the node simply notifies the worker thread
 that it is paused. Data will not be written to the bag because the state
 changes to `Inactive`.
 
-on_cleanup
-----------
+### on_cleanup
 
 When cleaning up, the node needs to stop recording, stop receiving data (i.e.
 unsubscribe from topics), and ensure that the final files of the bag (the last
 data file and the metadata file, which gets written when the writer object
 destructs) are copied to the destination directory.
 
-on_shutdown
------------
+### on_shutdown
 
 If not already performed, the shutdown transition performs the same functions
 as the cleanup transition.
