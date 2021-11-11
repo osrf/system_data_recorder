@@ -176,6 +176,8 @@ SystemDataRecorder::on_cleanup(const rclcpp_lifecycle::State & /* state */)
   return rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn::SUCCESS;
 }
 
+// If not already performed, the shutdown transition performs the same functions as the cleanup
+// transition.
 rclcpp_lifecycle::node_interfaces::LifecycleNodeInterface::CallbackReturn
 SystemDataRecorder::on_shutdown(const rclcpp_lifecycle::State & /* state */)
 {
