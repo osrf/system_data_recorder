@@ -100,6 +100,7 @@ private:
 
   void subscribe_to_topics();
   void subscribe_to_topic(const std::string & topic, const std::string & type);
+  std::string get_serialised_offered_qos_for_topic(const std::string & topic);
   rclcpp::QoS get_appropriate_qos_for_topic(const std::string & topic);
   void unsubscribe_from_topics();
 

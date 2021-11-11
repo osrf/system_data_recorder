@@ -16,6 +16,8 @@
 
 #include "lifecycle_msgs/msg/state.hpp"
 #include "rosbag2_storage/topic_metadata.hpp"
+#include "rosbag2_transport/qos.hpp"
+#include "yaml-cpp/yaml.h"
 
 namespace sdr
 {
@@ -38,6 +40,9 @@ SystemDataRecorder::SystemDataRecorder(
   storage_options_.storage_id = "sqlite3";
   // Set the maximum size of each individual file
   storage_options_.max_bagfile_size = max_file_size;
+  // Using a write cache is not required, but it helps avoid disc I/O becoming a bottleneck.
+  // Set this option to 0 to disable the cache
+  storage_options_.max_cache_size = 100*1024*1024;
 
   // Get the name of the bag directory from the bag URI - the bag URI should not be empty
   auto bag_directory_name = std::filesystem::path(bag_uri).filename();
@@ -52,7 +57,7 @@ SystemDataRecorder::SystemDataRecorder(
   destination_directory_ = std::filesystem::path(copy_destination) / bag_directory_name;
 
   // Initially, the "last" bag file will be the first bag file
-  last_bag_file_ = bag_directory_name.concat("_0.db3");
+  last_bag_file_ = std::filesystem::path(bag_uri) / bag_directory_name.concat("_0.db3");
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
@@ -91,9 +96,9 @@ SystemDataRecorder::on_configure(const rclcpp_lifecycle::State & /* state */)
     std::make_unique<rosbag2_cpp::writers::SequentialWriter>());
   // Add a callback for when a split occurs
   rosbag2_cpp::bag_events::WriterEventCallbacks callbacks;
-  callbacks.output_file_split_callback =
+  callbacks.write_split_callback =
     [this]
-    (rosbag2_cpp::bag_events::OutputFileSplitInfo & info) {
+    (rosbag2_cpp::bag_events::WriteSplitInfo & info) {
       // Record the opened file - this will be the last file remaining to be copied when recording
       // is terminated
       last_bag_file_ = info.opened_file;
@@ -209,14 +214,18 @@ void SystemDataRecorder::subscribe_to_topics()
 
 void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std::string & type)
 {
+  // Get the QoS offered by the topic for saving in the bag
+  auto offered_qos = get_serialised_offered_qos_for_topic(topic);
+  // Find out what QoS is most appropriate to use when subscribing to the topic
+  auto qos = get_appropriate_qos_for_topic(topic);
+
   // The metadata to pass to the writer object so it can register the topic in the bag
   auto topic_metadata = rosbag2_storage::TopicMetadata(
     {
       topic,  // Topic name
       type,  // Topic type, e.g. "example_interfaces/msg/String"
       rmw_get_serialization_format(),  // The serialization format, most likely to be "CDR"
-      ""  // The QoS profile for the topic in YAML - blank means system default; this will be used
-          // during playback
+      offered_qos  // The offered QoS profile for the topic in YAML
     }
   );
   // It is a good idea to create the topic in the writer prior to adding the subscription in case
@@ -225,8 +234,6 @@ void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std
   // maintainability.
   writer_->create_topic(topic_metadata);
 
-  // Find out what QoS is most appropriate to use when subscribing to the topic
-  auto qos = get_appropriate_qos_for_topic(topic);
   // Create a generic subscriber. A generic subscriber received message data in serialized form,
   // which means that:
   // - No de-serialization will take place, saving that processing time, and
@@ -241,7 +248,7 @@ void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std
       // paused (i.e. the node lifecycle state is "active"). If recording is paused, the message is
       // thrown away.
       if (get_current_state().id() == lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE) {
-        writer_->write(*message, topic, type, rclcpp::Clock(RCL_SYSTEM_TIME).now());
+        writer_->write(message, topic, type, rclcpp::Clock(RCL_SYSTEM_TIME).now());
       }
     });
   if (subscription) {
@@ -251,6 +258,16 @@ void SystemDataRecorder::subscribe_to_topic(const std::string & topic, const std
     writer_->remove_topic(topic_metadata);
     RCLCPP_ERROR(get_logger(), "Failed to subscribe to topic '%s'", topic.c_str());
   }
+}
+
+std::string SystemDataRecorder::get_serialised_offered_qos_for_topic(const std::string & topic)
+{
+  YAML::Node offered_qos_profiles;
+  auto endpoints = get_publishers_info_by_topic(topic);
+  for (const auto & endpoint : endpoints) {
+    offered_qos_profiles.push_back(rosbag2_transport::Rosbag2QoS(endpoint.qos_profile()));
+  }
+  return YAML::Dump(offered_qos_profiles);
 }
 
 // Figure out the most appropriate QoS for a given topic. This method tries to decide if
@@ -287,15 +304,17 @@ rclcpp::QoS SystemDataRecorder::get_appropriate_qos_for_topic(const std::string 
     // All publishers are reliable, so we can use the reliable QoS
     qos.reliable();
   } else {
-    // There is a mix of QoS profiles amongst the publishers, so use the QoS setting that captures
-    // all of them
-    RCLCPP_WARN(
-      get_logger(),
-      "Some, but not all, publishers on topic \"%s\" are offering "
-        "RMW_QOS_POLICY_RELIABILITY_RELIABLE. Falling back to "
-        "RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT as it will connect to all publishers. Some "
-        "messages from Reliable publishers could be dropped.",
-      topic.c_str());
+    if (reliability_reliable_endpoints_count > 0) {
+      // There is a mix of QoS profiles amongst the publishers, so use the QoS setting that captures
+      // all of them
+      RCLCPP_WARN(
+        get_logger(),
+        "Some, but not all, publishers on topic \"%s\" are offering "
+          "RMW_QOS_POLICY_RELIABILITY_RELIABLE. Falling back to "
+          "RMW_QOS_POLICY_RELIABILITY_BEST_EFFORT as it will connect to all publishers. Some "
+          "messages from Reliable publishers could be dropped.",
+        topic.c_str());
+    }
     qos.best_effort();
   }
 
@@ -303,15 +322,17 @@ rclcpp::QoS SystemDataRecorder::get_appropriate_qos_for_topic(const std::string 
     // All publishers are transient local, so we can use the transient local QoS
     qos.transient_local();
   } else {
-    // There is a mix of QoS profiles amongst the publishers, so use the QoS setting that captures
-    // all of them
-    RCLCPP_WARN(
-      get_logger(),
-      "Some, but not all, publishers on topic \"%s\" are offering "
-        "RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL. Falling back to "
-        "RMW_QOS_POLICY_DURABILITY_VOLATILE as it will connect to all publishers. Previously-"
-        "published latched messages will not be retrieved.",
-      topic.c_str());
+    if (durability_transient_local_endpoints_count > 0) {
+      // There is a mix of QoS profiles amongst the publishers, so use the QoS setting that captures
+      // all of them
+      RCLCPP_WARN(
+        get_logger(),
+        "Some, but not all, publishers on topic \"%s\" are offering "
+          "RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL. Falling back to "
+          "RMW_QOS_POLICY_DURABILITY_VOLATILE as it will connect to all publishers. Previously-"
+          "published latched messages will not be retrieved.",
+        topic.c_str());
+    }
     qos.durability_volatile();
   }
 
@@ -333,11 +354,6 @@ void SystemDataRecorder::unsubscribe_from_topics()
   }
   // Unsubscribing happens automatically when the subscription objects are destroyed
   subscriptions_.clear();
-  // Now that there is no chance of new messages arriving, it is safe to remove the topics from the
-  // writer
-  for (const auto & topic : topics) {
-    writer_->remove_topic(topic);
-  }
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////

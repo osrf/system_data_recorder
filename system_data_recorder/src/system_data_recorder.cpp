@@ -27,7 +27,7 @@ int main(int argc, char * argv[])
   rclcpp::init(argc, argv);
 
   auto topics_and_types = std::unordered_map<std::string, std::string>();
-  topics_and_types.insert({"chatter", "std_msgs/msg/String"});
+  topics_and_types.insert({"/chatter", "std_msgs/msg/String"});
   auto sdr_component = std::make_shared<sdr::SystemDataRecorder>(
     "sdr",
     rclcpp::NodeOptions(),

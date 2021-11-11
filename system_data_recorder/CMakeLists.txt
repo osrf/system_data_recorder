@@ -18,18 +18,21 @@ find_package(rclcpp_lifecycle REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(rosbag2_storage REQUIRED)
 find_package(rosbag2_transport REQUIRED)
+find_package(yaml_cpp_vendor REQUIRED)
 
 include_directories(include)
 
 add_library(sdr_component SHARED src/sdr_component.cpp)
 target_compile_definitions(sdr_component PRIVATE "SDR_BUILDING_DLL")
 ament_target_dependencies(sdr_component
+  lifecycle_msgs
   rclcpp
   rclcpp_components
   rclcpp_lifecycle
   rosbag2_cpp
   rosbag2_storage
   rosbag2_transport
+  yaml_cpp_vendor
 )
 rclcpp_components_register_nodes(sdr_component "sdr::SystemDataRecorder")
 
