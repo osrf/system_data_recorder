@@ -56,6 +56,43 @@ By default, the SDR will:
 - Copy bag files to the directory `copied_bag/test_bag`.
 - Split bag files every 100,000 bytes.
 
+### A simple test
+
+In one terminal, start publishing data on the `/chatter` topic.
+
+    ros2 run demo_nodes_cpp talker
+
+In another terminal, start the SDR node.
+
+    ros2 run system_data_recorder system_data_recorder
+
+In a third terminal, configure and activate the SDR.
+
+    ros2 lifecycle set sdr configure
+    ros2 lifecycle set sdr activate
+
+Wait a minute or two for 100,000 bytes of data to be recorded.
+Navigate to the directory `copied_bag` and observe that there is a `test_bag`
+directory containing the first data file of the bag.
+
+Deactivate and cleanup the SDR.
+
+    ros2 lifecycle set sdr deactivate
+    ros2 lifecycle set sdr cleanup
+
+Again navigate to the `copied_bag` directory, and observe that the `test_bag`
+directory now contains all the data files of the bag, and a `metadata.yaml`
+file.
+
+This is a complete, usable bag.
+This can be demonstrated by stopping the `talker` node, then starting the
+`listener` node and playing the bag file.
+
+    ros2 run demo_nodes_cpp listener
+    ros2 bag play copied_bag/test_bag
+
+The recorded data will be echoed by the `listener` node.
+
 
 ## Lifecycle transition behaviours
 
