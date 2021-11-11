@@ -1,6 +1,5 @@
-==========================
 System Data Recorder (SDR)
-==========================
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 A lifecycle node and executable for recording topic data to a rosbag2 bag, while simultaneously copying the split bag files to another location as each bag file is completed.
 This is useful, for example, to copy bag data files to an external disc during recording as each data file is completed, rather than waiting until all data is recorded before copying the entire bag at once (an operation that can take a significant time if the bag is large).
