@@ -98,7 +98,7 @@ SystemDataRecorder::on_configure(const rclcpp_lifecycle::State & /* state */)
   rosbag2_cpp::bag_events::WriterEventCallbacks callbacks;
   callbacks.write_split_callback =
     [this]
-    (rosbag2_cpp::bag_events::BagSplitInfo & info) {
+    (rosbag2_cpp::bag_events::WriteSplitInfo & info) {
       // Record the opened file - this will be the last file remaining to be copied when recording
       // is terminated
       last_bag_file_ = info.opened_file;
